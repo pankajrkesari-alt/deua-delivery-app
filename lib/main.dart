@@ -30,7 +30,7 @@ void main() async {
   runApp(const DeuaDeliveryApp());
 }
 
-Future<void> showNewOrderNotification(String title, String body) async {
+Future showNewOrderNotification(String title, String body) async {
   const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
     'deua_new_orders_channel',
     'DEUA New Orders',
@@ -75,13 +75,13 @@ class DeliveryAuthGate extends StatefulWidget {
   const DeliveryAuthGate({super.key});
 
   @override
-  State<DeliveryAuthGate> createState() => _DeliveryAuthGateState();
+  State createState() => _DeliveryAuthGateState();
 }
 
-class _DeliveryAuthGateState extends State<DeliveryAuthGate> {
+class _DeliveryAuthGateState extends State {
   final _supabase = Supabase.instance.client;
   bool _checking = true;
-  Map<String, dynamic>? _boy;
+  Map? _boy;
 
   @override
   void initState() {
@@ -89,7 +89,7 @@ class _DeliveryAuthGateState extends State<DeliveryAuthGate> {
     _restoreSession();
   }
 
-  Future<void> _restoreSession() async {
+  Future _restoreSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedId = prefs.getString('delivery_boy_session_id') ?? '';
@@ -99,14 +99,17 @@ class _DeliveryAuthGateState extends State<DeliveryAuthGate> {
             .select()
             .eq('id', savedId)
             .eq('role', 'delivery_boy');
-        final list = List>.from(rows as List);
-        if (list.isNotEmpty && list.first['is_active'] == true) {
-          if (!mounted) return;
-          setState(() {
-            _boy = list.first;
-            _checking = false;
-          });
-          return;
+        final list = List.from(rows as List);
+        if (list.isNotEmpty) {
+          final acc = Map.from(list.first as Map);
+          if (acc['is_active'] == true) {
+            if (!mounted) return;
+            setState(() {
+              _boy = acc;
+              _checking = false;
+            });
+            return;
+          }
         }
       }
     } catch (_) {}
@@ -114,14 +117,14 @@ class _DeliveryAuthGateState extends State<DeliveryAuthGate> {
     setState(() => _checking = false);
   }
 
-  Future<void> _onLogin(Map<String, dynamic> user) async {
+  Future _onLogin(Map user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('delivery_boy_session_id', user['id'].toString());
     if (!mounted) return;
     setState(() => _boy = user);
   }
 
-  Future<void> _onLogout() async {
+  Future _onLogout() async {
     if (_boy != null) {
       try {
         await _supabase
@@ -154,14 +157,14 @@ class _DeliveryAuthGateState extends State<DeliveryAuthGate> {
 }
 
 class DeliveryLoginScreen extends StatefulWidget {
-  final Future<void> Function(Map<String, dynamic> user) onSuccess;
+  final Future Function(Map user) onSuccess;
   const DeliveryLoginScreen({super.key, required this.onSuccess});
 
   @override
-  State<DeliveryLoginScreen> createState() => _DeliveryLoginScreenState();
+  State createState() => _DeliveryLoginScreenState();
 }
 
-class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
+class _DeliveryLoginScreenState extends State {
   final _supabase = Supabase.instance.client;
   final _idCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
@@ -169,7 +172,9 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
   bool _loading = false;
   String? _error;
 
-  Future<void> _login() async {
+  DeliveryLoginScreen get _w => widget as DeliveryLoginScreen;
+
+  Future _login() async {
     final rawId = _idCtrl.text.trim();
     final pass = _passCtrl.text;
     if (rawId.isEmpty || pass.isEmpty) {
@@ -188,7 +193,7 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
           .select()
           .eq('role', 'delivery_boy')
           .eq('login_id', rawId.toLowerCase());
-      final list = List>.from(rows as List);
+      final list = List.from(rows as List);
 
       if (list.isEmpty) {
         setState(() {
@@ -198,7 +203,7 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
         return;
       }
 
-      final acc = list.first;
+      final acc = Map.from(list.first as Map);
       if (acc['is_active'] != true) {
         setState(() {
           _loading = false;
@@ -215,7 +220,7 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
         return;
       }
 
-      await widget.onSuccess(acc);
+      await _w.onSuccess(acc);
     } catch (e) {
       setState(() {
         _loading = false;
@@ -353,9 +358,9 @@ class _DeliveryLoginScreenState extends State<DeliveryLoginScreen> {
 }
 
 class DeliveryHomeScreen extends StatefulWidget {
-  final Map<String, dynamic> boy;
-  final Future<void> Function() onLogout;
-  final void Function(Map<String, dynamic> updated) onBoyUpdated;
+  final Map boy;
+  final Future Function() onLogout;
+  final void Function(Map updated) onBoyUpdated;
 
   const DeliveryHomeScreen({
     super.key,
@@ -365,27 +370,29 @@ class DeliveryHomeScreen extends StatefulWidget {
   });
 
   @override
-  State<DeliveryHomeScreen> createState() => _DeliveryHomeScreenState();
+  State createState() => _DeliveryHomeScreenState();
 }
 
-class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
+class _DeliveryHomeScreenState extends State {
   final _supabase = Supabase.instance.client;
   int _tabIndex = 0;
   bool _loading = true;
   bool _onDuty = false;
-  List> _openOrders = [];
-  List> _myOrders = [];
-  final Set<String> _knownOrderIds = {};
+  List _openOrders = [];
+  List _myOrders = [];
+  final Set _knownOrderIds = {};
   Timer? _pollTimer;
   RealtimeChannel? _ordersChannel;
 
-  String get _myId => widget.boy['id'].toString();
-  String get _myName => widget.boy['name'].toString();
+  DeliveryHomeScreen get _w => widget as DeliveryHomeScreen;
+
+  String get _myId => _w.boy['id'].toString();
+  String get _myName => _w.boy['name'].toString();
 
   @override
   void initState() {
     super.initState();
-    _onDuty = widget.boy['is_on_duty'] == true;
+    _onDuty = _w.boy['is_on_duty'] == true;
     _fetchOrders(firstLoad: true);
     _subscribeRealtime();
     _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) => _fetchOrders());
@@ -412,14 +419,14 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
         .subscribe();
   }
 
-  Future<void> _toggleDuty(bool value) async {
+  Future _toggleDuty(bool value) async {
     setState(() => _onDuty = value);
     try {
       await _supabase
           .from('deua_staff_accounts')
           .update({'is_on_duty': value}).eq('id', _myId);
-      final updated = Map<String, dynamic>.from(widget.boy)..['is_on_duty'] = value;
-      widget.onBoyUpdated(updated);
+      final updated = Map.from(_w.boy)..['is_on_duty'] = value;
+      _w.onBoyUpdated(updated);
       await _fetchOrders();
       _showSnack(value ? 'आप अब ON DUTY हैं — नए ऑर्डर दिखेंगे।' : 'आप OFF DUTY हो गए हैं।');
     } catch (e) {
@@ -427,26 +434,31 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
     }
   }
 
-  Future<void> _fetchOrders({bool firstLoad = false}) async {
+  Future _fetchOrders({bool firstLoad = false}) async {
     try {
       final res = await _supabase
           .from('deua_orders')
           .select()
           .order('created_at', ascending: false);
-      final all = List>.from(res as List);
+      final all = List.from(res as List);
 
-      final List> openList = [];
-      final List> mineList = [];
+      final List openList = [];
+      final List mineList = [];
       bool hasBrandNewOrder = false;
       String latestAlertText = '';
 
-      for (final ord in all) {
+      for (final item in all) {
+        final ord = Map.from(item as Map);
         final ordId = ord['id'].toString();
         final status = (ord['status'] ?? 'Pending').toString();
         final assignedId = (ord['delivery_boy_id'] ?? '').toString();
-        final rejectedList = ord['rejected_by_ids'] is List
-            ? List<String>.from((ord['rejected_by_ids'] as List).map((e) => e.toString()))
-            : <String>[];
+
+        final List rejectedList = [];
+        if (ord['rejected_by_ids'] is List) {
+          for (final r in (ord['rejected_by_ids'] as List)) {
+            rejectedList.add(r.toString());
+          }
+        }
 
         if (assignedId == _myId) {
           mineList.add(ord);
@@ -483,7 +495,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
     }
   }
 
-  Future<void> _acceptOrder(Map<String, dynamic> ord) async {
+  Future _acceptOrder(Map ord) async {
     try {
       final updated = await _supabase
           .from('deua_orders')
@@ -496,7 +508,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
           .isFilter('delivery_boy_id', null)
           .select();
 
-      final list = List>.from(updated as List);
+      final list = List.from(updated as List);
       if (list.isEmpty) {
         _showSnack('यह ऑर्डर किसी और Delivery Boy ने पहले ही Accept कर लिया है।', isError: true);
       } else {
@@ -509,11 +521,14 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
     }
   }
 
-  Future<void> _rejectOrder(Map<String, dynamic> ord) async {
+  Future _rejectOrder(Map ord) async {
     try {
-      final existingRejected = ord['rejected_by_ids'] is List
-          ? List<String>.from((ord['rejected_by_ids'] as List).map((e) => e.toString()))
-          : <String>[];
+      final List existingRejected = [];
+      if (ord['rejected_by_ids'] is List) {
+        for (final r in (ord['rejected_by_ids'] as List)) {
+          existingRejected.add(r.toString());
+        }
+      }
       if (!existingRejected.contains(_myId)) {
         existingRejected.add(_myId);
       }
@@ -527,7 +542,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
     }
   }
 
-  Future<void> _markDelivered(dynamic orderId) async {
+  Future _markDelivered(dynamic orderId) async {
     try {
       await _supabase
           .from('deua_orders')
@@ -549,7 +564,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> ord, {required bool isAvailableTab}) {
+  Widget _buildOrderCard(Map ord, {required bool isAvailableTab}) {
     final items = ord['items'] is List ? List.from(ord['items'] as List) : [];
     final status = (ord['status'] ?? 'Pending').toString();
     final isDelivered = status == 'Delivered';
@@ -596,7 +611,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
             Text('पता: ${ord['delivery_address']}', style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
             const Divider(height: 16),
             ...items.map((it) {
-              final m = Map<String, dynamic>.from(it as Map);
+              final m = Map.from(it as Map);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 3),
                 child: Row(
@@ -649,6 +664,10 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final activeOrderMap = _tabIndex == 0
+        ? (_openOrders.isNotEmpty ? Map.from(_openOrders[_openOrders.length - 1] as Map) : null)
+        : (_myOrders.isNotEmpty ? Map.from(_myOrders[_myOrders.length - 1] as Map) : null);
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: const Color(0xFF1B7A2B),
@@ -662,7 +681,7 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
         ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: () => _fetchOrders()),
-          IconButton(icon: const Icon(Icons.logout), onPressed: widget.onLogout),
+          IconButton(icon: const Icon(Icons.logout), onPressed: _w.onLogout),
         ],
       ),
       body: Column(
@@ -695,38 +714,26 @@ class _DeliveryHomeScreenState extends State<DeliveryHomeScreen> {
                 ? const Center(child: CircularProgressIndicator(color: Color(0xFF1B7A2B)))
                 : RefreshIndicator(
                     onRefresh: () => _fetchOrders(),
-                    child: _tabIndex == 0
-                        ? (_openOrders.isEmpty
-                            ? ListView(
-                                children: [
-                                  const SizedBox(height: 120),
-                                  Center(
-                                    child: Text(
-                                      _onDuty
+                    child: activeOrderMap == null
+                        ? ListView(
+                            children: [
+                              const SizedBox(height: 120),
+                              Center(
+                                child: Text(
+                                  _tabIndex == 0
+                                      ? (_onDuty
                                           ? 'अभी कोई नया ऑर्डर उपलब्ध नहीं है'
-                                          : 'नए ऑर्डर देखने के लिए ऊपर ON DUTY चालू करें',
-                                      style: const TextStyle(fontSize: 14, color: Colors.black54),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.all(12),
-                                itemCount: _openOrders.length,
-                                itemBuilder: (_, i) => _buildOrderCard(_openOrders[i], isAvailableTab: true),
-                              ))
-                        : (_myOrders.isEmpty
-                            ? ListView(
-                                children: const [
-                                  SizedBox(height: 120),
-                                  Center(child: Text('आपने अभी तक कोई ऑर्डर Accept नहीं किया है')),
-                                ],
-                              )
-                            : ListView.builder(
-                                padding: const EdgeInsets.all(12),
-                                itemCount: _myOrders.length,
-                                itemBuilder: (_, i) => _buildOrderCard(_myOrders[i], isAvailableTab: false),
-                              )),
+                                          : 'नए ऑर्डर देखने के लिए ऊपर ON DUTY चालू करें')
+                                      : 'आपने अभी तक कोई ऑर्डर Accept नहीं किया है',
+                                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                                ),
+                              ),
+                            ],
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.all(12),
+                            children: [_buildOrderCard(activeOrderMap, isAvailableTab: _tabIndex == 0)],
+                          ),
                   ),
           ),
         ],
